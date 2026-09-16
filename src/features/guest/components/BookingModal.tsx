@@ -1,23 +1,25 @@
 import React, { useState, useMemo } from 'react';
-import { X, Calendar, User, Mail, CheckCircle2 } from 'lucide-react';
+import { X, Calendar, User, Mail, CheckCircle2, AlertCircle } from 'lucide-react';
 import { differenceInDays, parseISO } from 'date-fns';
-import type { Room, Booking } from '../../../shared/types'; // adjust relative path if needed
+import { isDateRangeConflicting } from '../../../shared/utils/dateValidation';
+import type { Room, Booking } from '../../../shared/types';
 
 interface BookingModalProps {
   room: Room | null;
+  existingBookings: Booking[];
   onClose: () => void;
   onConfirmBooking: (booking: Booking) => void;
 }
 
 export const BookingModal: React.FC<BookingModalProps> = ({
   room,
+  existingBookings,
   onClose,
   onConfirmBooking,
 }) => {
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
 
-  // Memoize initial date strings so Date creation is pure during render
   const { todayStr, tomorrowStr } = useMemo(() => {
     const now = new Date();
     const tomorrow = new Date(now.getTime() + 86400000);
@@ -33,7 +35,9 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
   if (!room) return null;
 
-  // Dynamic night & price calculation
+  // Check for date conflicts dynamically
+  const hasConflict = isDateRangeConflicting(room.id, checkIn, checkOut, existingBookings);
+
   const nights = Math.max(
     1,
     differenceInDays(parseISO(checkOut), parseISO(checkIn)) || 1
@@ -42,7 +46,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!guestName || !guestEmail) return;
+    if (!guestName || !guestEmail || hasConflict) return;
 
     const newBooking: Booking = {
       id: `BK-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -63,7 +67,6 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
       <div className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl">
-        {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 p-5">
           <h2 className="text-lg font-bold text-white">
             {confirmedBooking ? 'Reservation Confirmed' : `Reserve Room ${room.roomNumber}`}
@@ -77,7 +80,6 @@ export const BookingModal: React.FC<BookingModalProps> = ({
         </div>
 
         {confirmedBooking ? (
-          /* Confirmation Summary View */
           <div className="p-6 text-center">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
               <CheckCircle2 className="h-8 w-8" />
@@ -87,7 +89,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
               Booking code: <span className="font-mono font-bold text-blue-400">{confirmedBooking.id}</span>
             </p>
 
-            <div className="mt-6 rounded-xl border border-slate-800 bg-slate-950 p-4 text-left text-xs space-y-2">
+            <div className="mt-6 space-y-2 rounded-xl border border-slate-800 bg-slate-950 p-4 text-left text-xs">
               <div className="flex justify-between">
                 <span className="text-slate-400">Guest:</span>
                 <span className="font-semibold text-slate-200">{confirmedBooking.guestName}</span>
@@ -112,8 +114,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
             </button>
           </div>
         ) : (
-          /* Booking Form View */
-          <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4 p-6">
             <div>
               <label className="text-xs font-semibold uppercase text-slate-400">Full Name</label>
               <div className="relative mt-1 flex items-center">
@@ -174,25 +175,34 @@ export const BookingModal: React.FC<BookingModalProps> = ({
               </div>
             </div>
 
-            {/* Price Breakdown Card */}
-            <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-1.5 text-xs">
+            {/* Overlap Error Warning */}
+            {hasConflict && (
+              <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-400">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>Selected dates overlap with an existing booking for this room.</span>
+              </div>
+            )}
+
+            {/* Price Breakdown */}
+            <div className="space-y-1.5 rounded-xl border border-slate-800 bg-slate-950/60 p-4 text-xs">
               <div className="flex justify-between text-slate-400">
                 <span>
                   ₱{room.pricePerNight.toLocaleString()} x {nights} night{nights > 1 ? 's' : ''}
                 </span>
                 <span>₱{(nights * room.pricePerNight).toLocaleString()}</span>
               </div>
-              <div className="flex justify-between font-bold text-white border-t border-slate-800 pt-2">
+              <div className="flex justify-between border-t border-slate-800 pt-2 font-bold text-white">
                 <span>Total</span>
-                <span className="text-blue-400 text-sm">₱{totalPrice.toLocaleString()}</span>
+                <span className="text-sm text-blue-400">₱{totalPrice.toLocaleString()}</span>
               </div>
             </div>
 
             <button
               type="submit"
-              className="w-full rounded-xl bg-blue-600 py-3 text-xs font-bold text-white hover:bg-blue-500 active:scale-[0.98]"
+              disabled={hasConflict}
+              className="w-full rounded-xl bg-blue-600 py-3 text-xs font-bold text-white transition hover:bg-blue-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Confirm & Pay (₱{totalPrice.toLocaleString()})
+              {hasConflict ? 'Dates Unavailable' : `Confirm & Pay (₱${totalPrice.toLocaleString()})`}
             </button>
           </form>
         )}
