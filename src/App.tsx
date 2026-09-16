@@ -3,12 +3,15 @@ import { Navbar } from './shared/components/Navbar';
 import { GuestBookingPage } from './features/guest/pages/GuestBookingPage';
 import { AdminDashboardPage } from './features/admin/pages/AdminDashboardPage';
 import { INITIAL_ROOMS, INITIAL_BOOKINGS } from './shared/data/mockData';
+import { useLocalStorage } from './shared/hooks/useLocalStorage';
 import type { Room, Booking, RoomStatus, BookingStatus } from './shared/types';
 
 export function App() {
   const [currentView, setCurrentView] = useState<'guest' | 'admin'>('guest');
-  const [rooms, setRooms] = useState<Room[]>(INITIAL_ROOMS);
-  const [bookings, setBookings] = useState<Booking[]>(INITIAL_BOOKINGS);
+
+  // Persisted state across page reloads
+  const [rooms, setRooms] = useLocalStorage<Room[]>('booked_rooms', INITIAL_ROOMS);
+  const [bookings, setBookings] = useLocalStorage<Booking[]>('booked_bookings', INITIAL_BOOKINGS);
 
   const handleConfirmBooking = (newBooking: Booking) => {
     setBookings((prev) => [newBooking, ...prev]);
